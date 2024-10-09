@@ -100,7 +100,7 @@ class NewExcel extends Command
     /**
      * Extract footnotes from the content.
      * @param mixed $content
-     * @return []
+     * @return string
      */
     private function extractFootnotesAndCleanContent($content)
     {
@@ -124,10 +124,14 @@ class NewExcel extends Command
         // Concatenate the matched footnote HTML into a single string
         $footnotes = implode(' ', $matches[0]);
 
+        // Concatenate the matched footnote HTML into a single string
+        // Return all matched footnote HTML as one string
+        return $footnotes;
+
         // Return both the cleaned content and the footnotes
-        return [
-            'cleaned_content' => trim($cleanedContent),
-            'footnotes' => $footnotes
-        ];
+        // return [
+        //     'cleaned_content' => trim($cleanedContent),
+        //     'footnotes' => $footnotes
+        // ];
     }
 }
