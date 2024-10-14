@@ -43,7 +43,7 @@ class NewExcel extends Command
             $modifiedContent = $this->extractFootnotesAndCleanContent($item['Content'] ?? '');
 
 
-            // $item['Content'] = $modifiedContent['cleaned_content'];
+            $item['Content'] = $modifiedContent['cleaned_content'];
             $item['footnotes'] = $modifiedContent['footnotes'];
 
             // if ($item['ID'] == '21653') {
@@ -212,45 +212,88 @@ class NewExcel extends Command
         //new experimental code
         //==============================
 
-        //         $testContent = '<p><span style="font-size: 12px;"><a href="#_ftnref1" name="_ftn1">[1]</a> A. Leke and L. Signé, “Spotlighting opportunities for business in Africa and strategies to succeed in the world’s next big growth market,” Brookings, Feb. 11, 2019, </span><span style="font-size: 12px;"><a href="https://www.brookings.edu/research/spotlighting-opportunities-for-business-in-africa-and-strategies-to-succeed-in-the-worlds-next-big-growth-market/.%20%20">https://www.brookings.edu/research/spotlighting-opportunities-for-business-in-africa-and-strategies-to-succeed-in-the-worlds-next-big-growth-market/. </a> </span><span style="font-size: 12px;">UHC in Africa: A Framework for Action,” World Bank and World Health Organization. <a href="https://www.worldbank.org/en/topic/universalhealthcoverage/publication/universal-health-coverage-in-africa-a-framework-for-action">https://www.worldbank.org/en/topic/universalhealthcoverage/publication/universal-health-coverage-in-africa-a-framework-for-action</a></span></p>
-// <p><span style="font-size: 12px;"><a href="#_ftnref2" name="_ftn2">[2]</a> “Population Total – MENA,” The World Bank, <a href="https://data.worldbank.org/indicator/SP.POP.TOTL?locations=ZQ&amp;name_desc=false">https://data.worldbank.org/indicator/SP.POP.TOTL?locations=ZQ&amp;name_desc=false</a>.  </span></p>
-// <p><span style="font-size: 12px;"><a href="#_ftnref3" name="_ftn3">[3]</a> “Policy Brief: The Impact of COVID-19 on the Arab Region, An Opportunity to Build Back Better,” United Nations, July 2020. <a href="https://data.worldbank.org/indicator/SP.POP.TOTL?locations=ZQ&amp;name_desc=false">https://data.worldbank.org/indicator/SP.POP.TOTL?locations=ZQ&amp;name_desc=false</a>.  </span></p>
-// <p>&nbsp;</p>';
+        //         $testContent = '<p>تستند هذه البيانات الاستشرافية إلى التوقعات الحالية للإدارة، وبالتالي لا تمثل وعودًا ولا ضمانات، ولكنها تنطوي على مخاطر وشكوك وعوامل مهمة أخرى معروفة وغير معروفة قد تؤدي إلى اختلاف نتائجنا الفعلية أو أدائنا أو إنجازاتنا عن أي نتائج أو أداء أو إنجازات مستقبلية تم الإفصاح عنها صراحة أو ضمنيًا من خلال البيانات الاستشرافية، بما في ذلك، على سبيل المثال لا الحصر، ما يلي: تأثير جائحة فيروس كورونا المستجد على عملياتنا، بما في ذلك دراساتنا قبل السريرية والتجارب السريرية، واستمرارية أعمالنا؛ وغيرها من العبارات التي تشير إلى تكبدنا خسائر كبيرة، ولم نحقق أرباحًا حاليًا وقد لا نحقق أرباحًا أبدًا؛ وحاجتنا إلى تمويل إضافي؛ وتاريخنا التشغيلي المحدود؛ ونهجنا غير المثبت للتدخل العلاجي؛ والإجراءات المطولة والمكلفة وغير المؤكدة لتطوير الأدوية السريرية، بما في ذلك التأخير المحتمل في الموافقات التنظيمية؛ واعتمادنا على الأطراف الثالثة والمتعاونين لتوسيع مكتبتنا الميكروبية، وإجراء تجاربنا السريرية، وتصنيع المنتجات المرشحة لدينا، وتطوير المنتجات المرشحة وتسويقها تجاريًا، والموافقة عليها؛ وضعف خبرتنا في التصنيع والبيع والتسويق وتوزيع المنتجات المرشحة لدينا؛ الفشل في التنافس مع شركات الأدوية الأخرى؛ وحماية التكنولوجيا الخاصة بنا وسرية أسرارنا التجارية؛ والدعاوى القضائية المحتملة، أو الدعاوى المتعلقة بانتهاك الملكية الفكرية لطرف ثالث أو الطعون المقدمة ضد ملكية ملكيتنا الفكرية؛ والقرارات الصادرة بشأن بطلان أو عدم قابلية تنفيذ براءات الاختراع الخاصة بنا؛ والمخاطر المرتبطة بالعمليات الدولية؛ وقدرتنا على الاحتفاظ بالموظفين الرئيسيين وإدارة نمونا؛ والتقلبات المحتملة في أسعار أسهمنا؛ وتمتع إدارتنا ومساهمونا الرئيسيون بالقدرة على التحكم في أعمالنا أو التأثير عليها بشكل كبير؛ وتكاليف وموارد العمل كشركة عامة؛ والأبحاث أو التقارير غير المواتية؛ والدعاوى الجماعية المقامة ضدنا بشأن الأوراق المالية.</p>
+// <p>هذه العوامل وغيرها من العوامل المهمة التي تمت مناقشتها تحت مسمى "عوامل المخاطرة" في تقريرنا ربع السنوي في النموذج 10 للربع المنتهي في 30 سبتمبر 2020، وتقاريرنا الأخرى المقدمة إلى لجنة الأوراق المالية والبورصات، قد تتسبب في اختلاف النتائج الفعلية ماديًا عن تلك المشار إليها في البيانات الاستشرافية الواردة في هذا البيان الصحفي. تمثل أي بيانات استشرافية من هذا القبيل تقديرات من قبل الإدارة اعتبارًا من تاريخ هذا البيان الصحفي. وقد نقوم بتحديث هذه البيانات الاستشرافية في وقت ما في المستقبل، وباستثناء ما يقتضيه القانون، فإننا نخلي مسؤوليتنا عن أي التزام للقيام بذلك، حتى إذا تسببت الأحداث اللاحقة في تغيير وجهات نظرنا. لا ينبغي الاعتماد على هذه البيانات الاستشرافية باعتبارها تمثل وجهات نظرنا في أي تاريخ لاحق لتاريخ هذا البيان الصحفي.</p>
+// <p><a href="#_ftnref1" name="_ftn1">[1]</a> A. Leke and L. Signé, “Spotlighting opportunities for business in Africa and strategies to succeed in the world’s next big growth market,” Brookings, Feb. 11, 2019. <a href="https://www.brookings.edu/research/spotlighting-opportunities-for-business-in-africa-and-strategies-to-succeed-in-the-worlds-next-big-growth-market/">https://www.brookings.edu/research/spotlighting-opportunities-for-business-in-africa-and-strategies-to-succeed-in-the-worlds-next-big-growth-market/</a>.</p>
+// <p><a href="#_ftnref2" name="_ftn2">[2]</a> UHC in Africa: A Framework for Action,” World Bank and World Health Organization. <a href="https://www.who.int/health_financing/documents/uhc-in-africa-a-framework-for-action.pdf">https://www.who.int/health_financing/documents/uhc-in-africa-a-framework-for-action.pdf</a>.</p>
+// <p><a href="#_ftnref3" name="_ftn3">[3]</a> “Population Total – MENA,” The World Bank, <a href="https://data.worldbank.org/indicator/SP.POP.TOTL?locations=ZQ&amp;name_desc=false">https://data.worldbank.org/indicator/SP.POP.TOTL?locations=ZQ&amp;name_desc=false</a>.</p>
+// <p><a href="#_ftnref4" name="_ftn4">[4]</a> “Policy Brief: The Impact of COVID-19 on the Arab Region, An Opportunity to Build Back Better,” United Nations, July 2020. <a href="https://data.worldbank.org/indicator/SP.POP.TOTL?locations=ZQ&amp;name_desc=false">https://data.worldbank.org/indicator/SP.POP.TOTL?locations=ZQ&amp;name_desc=false</a>.</p>';
 
         $parentHtml = $this->extractFootnotes($content);
+
+        // dd($parentHtml);
 
         // if ($parentHtml) {
 
         //     dd($parentHtml);
         // }
 
-        return [
-            'cleaned_content' => '',
-            'footnotes' => $parentHtml,
-        ];
+        return $parentHtml;
 
     }
 
 
+    /**
+     * Extraction of footnotes from WYSIWIG Content
+     * 
+     * @param mixed $htmlContent
+     * @return string[]
+     */
     function extractFootnotes($htmlContent)
     {
-        $dom = new DOMDocument();
-        @$dom->loadHTML($htmlContent, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        $dom = new DOMDocument;
+        libxml_use_internal_errors(true); // Suppress parsing errors
+        $dom->loadHTML(mb_convert_encoding($htmlContent, 'HTML-ENTITIES', 'UTF-8'));
+        libxml_clear_errors();
+
         $xpath = new DOMXPath($dom);
 
-        // Find all <p> elements that contain links with href starting with #_ftnref
-        // $footnoteParagraphs = $xpath->query("//p[a[starts-with(@href, '#_ftnref')]]");
-        // $footnoteParagraphs = $xpath->query("//p[a[starts-with(@href, '#_ftnref')]]");
-        // $footnoteParagraphs = $xpath->query("//p[.//a[starts-with(@href, '#_ftnref')]]");
+        // XPath to find all footnote links
+        $footnotes = $xpath->query('//a[contains(@href, "#_ftnref")]');
 
-        // Find any element containing <a> with href starting with #_ftnref
-        $footnoteElements = $xpath->query("//*[a[starts-with(@href, '#_ftnref')]]");
-        $footnotes = [];
+        $output = [];
+        foreach ($footnotes as $footnote) {
+            // Get the parent node of the footnote link
+            $parent = $footnote->parentNode;
 
-        foreach ($footnoteElements as $paragraph) {
-            $footnotes[] = $dom->saveHTML($paragraph); // Save the entire <p> element as HTML
+            // Check if the parent is a <p> tag
+            if ($parent->nodeName === 'p') {
+                $output[] = $dom->saveHTML($parent);
+
+                // Remove the parent from the DOM
+                $parent->parentNode->removeChild($parent);
+            } else {
+                // If not a <p> tag, find the closest parent that is a <p>
+                $pParent = $parent;
+                while ($pParent && $pParent->nodeName !== 'p') {
+                    $pParent = $pParent->parentNode;
+                }
+                // If found, add the HTML of the <p> tag to output
+                if ($pParent) {
+                    $output[] = $dom->saveHTML($pParent);
+
+                    // Remove the parent from the DOM
+                    $pParent->parentNode->removeChild($pParent);
+                }
+            }
         }
 
-        return implode('<br>', $footnotes); // Return concatenated footnote HTML
+        // Get the modified HTML after removing footnotes
+        $bodyContent = '';
+        $body = $dom->getElementsByTagName('body')->item(0);
+        if ($body) {
+            $bodyContent = $dom->saveHTML($body);
+        }
+
+        // Remove the <body> tags to leave only the inner content
+        $bodyContent = preg_replace('/^<body[^>]*>|<\/body>$/', '', $bodyContent);
+
+
+        // Return footnotes as HTML with line breaks
+        return [
+            'cleaned_content' => trim($bodyContent),
+            'footnotes' => implode('<br>', $output),
+        ];
+
     }
 }
