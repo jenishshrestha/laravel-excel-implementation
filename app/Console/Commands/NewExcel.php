@@ -97,25 +97,47 @@ class NewExcel extends Command
      */
     private function businessSectorMapping($oldNewsExcel, $oldBusinessSectorExcel)
     {
-        $modifiedData = $oldNewsExcel->map(function ($item) use ($oldBusinessSectorExcel) {
-            $businessSectorKeys = ['EN', 'AR', 'CHN', 'FR', 'JP', 'ESP', 'TRK'];
-            $sector = null;
-            $newID = null;
 
+        // Pre-index the oldBusinessSectorExcel for faster lookups
+        $indexedSectors = [];
 
+        // Pre-process the oldBusinessSectorExcel to create an index for all keys
+        $businessSectorKeys = ['EN', 'AR', 'CHN', 'FR', 'JP', 'ESP', 'TRK'];
+
+        // Build a dictionary for faster lookup of new IDs
+        // generates an array of mapped old id's with new id's
+        foreach ($oldBusinessSectorExcel as $sector) {
             foreach ($businessSectorKeys as $key) {
-                // Check if the trimmed news_business_sector exists in the current key
-                // $sector will contain all the row of matched value
-                $sector = $oldBusinessSectorExcel->firstWhere($key, trim($item['news_business_sector']));
+                // Index sectors by their old value (trimmed) for each language key
+                $trimmedValue = trim($sector[$key]);
+                if (! empty($trimmedValue)) {
+                    $indexedSectors[$trimmedValue] = $sector[$key . '_new'];
+                }
+            }
+        }
 
-                // If a match is found, break the loop
-                if ($sector) {
-                    $newID = $sector[$key . '_new'];
-                    break; // Exit the loop if a match is found
+        // dd($indexedSectors); // output values for test
+
+
+        // Map over the oldNewsExcel and update the business sector IDs
+        $modifiedData = $oldNewsExcel->map(function ($item) use ($indexedSectors) {
+            $newIDs = [];
+
+            // Split the news_business_sector if it contains multiple values separated by a pipe
+            $sectors = explode('|', $item['news_business_sector']);
+
+            // Iterate over each sector in the item
+            foreach ($sectors as $sectorValue) {
+                $trimmedSectorValue = trim($sectorValue);
+
+                // Check if the sector value exists in the indexedSectors map
+                if (isset($indexedSectors[$trimmedSectorValue])) {
+                    $newIDs[] = $indexedSectors[$trimmedSectorValue]; // Add new ID to the list
                 }
             }
 
-            $item['updated_business_sector_id'] = $newID;
+            // Join the new IDs as a pipe-separated string (or handle how you prefer)
+            $item['updated_business_sector_id'] = implode('|', $newIDs);
 
             return $item;
         });
