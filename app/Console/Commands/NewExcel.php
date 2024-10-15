@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use DOMDocument;
 use DOMXPath;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 
 class NewExcel extends Command
@@ -35,25 +36,40 @@ class NewExcel extends Command
         // Load and format news data
         $oldNewsExcel = $this->formatExcelData('app/public/Press-Release-2.0.csv');
 
-        // Step 1: Adding new column news_business_sector_title after matching ID and news_business_sector
-        $finalData = $this->businessSectorMapping($oldNewsExcel, $oldBusinessSectorExcel);
+        $finalData = $oldNewsExcel->map(function ($item) use ($oldBusinessSectorExcel) {
+            // Step 1: Business sector mapping
+            $indexedSectors = $this->preIndexSectors($oldBusinessSectorExcel);
+            $item = $this->mapBusinessSector($item, $indexedSectors);
 
-        // Step 2: Extract footnotes from the content and add to new column called footnotes
-        $finalData = $finalData->map(function ($item) {
+            // Step 2: Footnote extraction
             $modifiedContent = $this->extractFootnotes($item['Content'] ?? '');
-
-
             $item['Content'] = $modifiedContent['cleaned_content'];
             $item['footnotes'] = $modifiedContent['footnotes'];
 
-            // if ($item['ID'] == '21653') {
-            //     dd($modifiedContent);
-            // }
+            // Step 3: Timestamp conversion
+            if (! empty($item['wpcf-news-publish_date'])) {
+                $item['wpcf-news-publish_date'] = $this->convertTimestampFormat($item['wpcf-news-publish_date']);
+            }
+
+            // Step 4: Clean HTML from news_summary and convert it to plain text
+            if (! empty($item['news_summary'])) {
+                // Use strip_tags to remove any HTML tags from the summary
+                $item['news_summary'] = strip_tags($item['news_summary']);
+            }
+
             return $item;
         });
 
         // Convert data to array with headers
         $rows = $this->prepareForExcel($finalData);
+
+        // Define the file path
+        $filePath = 'public/build.csv';
+
+        // Delete the file if it already exists
+        if (Storage::exists($filePath)) {
+            Storage::delete($filePath);
+        }
 
         // Store the final Excel file
         Excel::store(new class ($rows) implements \Maatwebsite\Excel\Concerns\FromArray {
@@ -67,7 +83,7 @@ class NewExcel extends Command
             {
                 return $this->finalData;
             }
-        }, 'public/modified-press-release.csv');
+        }, $filePath);
 
         print_r('New file has been generated');
     }
@@ -90,25 +106,18 @@ class NewExcel extends Command
     }
 
     /**
-     * Manipulate new data into CSV
-     * @param mixed $oldNewsExcel
-     * @param mixed $oldBusinessSectorExcel
-     * @return mixed
+     * Pre-index business sectors for faster lookup.
+     * 
+     * @param \Illuminate\Support\Collection $oldBusinessSectorExcel
+     * @return array
      */
-    private function businessSectorMapping($oldNewsExcel, $oldBusinessSectorExcel)
+    private function preIndexSectors($oldBusinessSectorExcel)
     {
-
-        // Pre-index the oldBusinessSectorExcel for faster lookups
         $indexedSectors = [];
-
-        // Pre-process the oldBusinessSectorExcel to create an index for all keys
         $businessSectorKeys = ['EN', 'AR', 'CHN', 'FR', 'JP', 'ESP', 'TRK'];
 
-        // Build a dictionary for faster lookup of new IDs
-        // generates an array of mapped old id's with new id's
         foreach ($oldBusinessSectorExcel as $sector) {
             foreach ($businessSectorKeys as $key) {
-                // Index sectors by their old value (trimmed) for each language key
                 $trimmedValue = trim($sector[$key]);
                 if (! empty($trimmedValue)) {
                     $indexedSectors[$trimmedValue] = $sector[$key . '_new'];
@@ -116,33 +125,31 @@ class NewExcel extends Command
             }
         }
 
-        // dd($indexedSectors); // output values for test
+        return $indexedSectors;
+    }
 
+    /**
+     * Map business sector for a single item.
+     * 
+     * @param array $item
+     * @param array $indexedSectors
+     * @return array
+     */
+    private function mapBusinessSector($item, $indexedSectors)
+    {
+        $newIDs = [];
+        $sectors = explode('|', $item['news_business_sector']);
 
-        // Map over the oldNewsExcel and update the business sector IDs
-        $modifiedData = $oldNewsExcel->map(function ($item) use ($indexedSectors) {
-            $newIDs = [];
-
-            // Split the news_business_sector if it contains multiple values separated by a pipe
-            $sectors = explode('|', $item['news_business_sector']);
-
-            // Iterate over each sector in the item
-            foreach ($sectors as $sectorValue) {
-                $trimmedSectorValue = trim($sectorValue);
-
-                // Check if the sector value exists in the indexedSectors map
-                if (isset($indexedSectors[$trimmedSectorValue])) {
-                    $newIDs[] = $indexedSectors[$trimmedSectorValue]; // Add new ID to the list
-                }
+        foreach ($sectors as $sectorValue) {
+            $trimmedSectorValue = trim($sectorValue);
+            if (isset($indexedSectors[$trimmedSectorValue])) {
+                $newIDs[] = $indexedSectors[$trimmedSectorValue];
             }
+        }
 
-            // Join the new IDs as a pipe-separated string (or handle how you prefer)
-            $item['updated_business_sector_id'] = implode('|', $newIDs);
+        $item['updated_business_sector_id'] = implode('|', $newIDs);
 
-            return $item;
-        });
-
-        return $modifiedData;
+        return $item;
     }
 
     /**
@@ -153,7 +160,7 @@ class NewExcel extends Command
     private function prepareForExcel($collection)
     {
         $headers = array_keys($collection->first() ?? []);
-        $rows = $collection->map(function ($item) {
+        $rows = $collection->map(function ($item) : array {
             return array_values($item);
         })->toArray();
 
@@ -162,6 +169,20 @@ class NewExcel extends Command
         return $rows;
     }
 
+    /**
+     * Convert timestamp format to desired format using DateTime.
+     * 
+     * @param string $timestamp
+     * @return string
+     */
+    private function convertTimestampFormat($timestamp)
+    {
+        // Parse the Unix timestamp using Carbon
+        $date = \Carbon\Carbon::createFromTimestamp($timestamp);
+
+        // Convert to the desired format: 'Y-m-d' for ACF fields
+        return $date->format('Y-m-d');
+    }
 
     /**
      * Extraction of footnotes from WYSIWIG Content
@@ -169,7 +190,7 @@ class NewExcel extends Command
      * @param mixed $htmlContent
      * @return string[]
      */
-    function extractFootnotes($htmlContent)
+    private function extractFootnotes($htmlContent)
     {
         $dom = new DOMDocument;
         libxml_use_internal_errors(true); // Suppress parsing errors
@@ -218,12 +239,10 @@ class NewExcel extends Command
         // Remove the <body> tags to leave only the inner content
         $bodyContent = preg_replace('/^<body[^>]*>|<\/body>$/', '', $bodyContent);
 
-
         // Return footnotes as HTML with line breaks
         return [
             'cleaned_content' => trim($bodyContent),
-            'footnotes' => implode('<br>', $output),
+            'footnotes' => implode('', $output),
         ];
-
     }
 }
