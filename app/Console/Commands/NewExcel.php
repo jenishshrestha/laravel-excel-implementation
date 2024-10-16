@@ -36,42 +36,70 @@ class NewExcel extends Command
         // Load and format news data
         $oldNewsExcel = $this->formatExcelData('app/public/Press-Release-2.0.csv');
 
-        $finalData = $oldNewsExcel->map(function ($item) use ($oldBusinessSectorExcel) {
-            // Step 1: Business sector mapping
-            $indexedSectors = $this->preIndexSectors($oldBusinessSectorExcel);
-            $item = $this->mapBusinessSector($item, $indexedSectors);
+        $indexedSectors = $this->preIndexSectors($oldBusinessSectorExcel);
 
-            // Step 2: Footnote extraction
-            $modifiedContent = $this->extractFootnotes($item['Content'] ?? '');
-            $item['Content'] = $modifiedContent['cleaned_content'];
-            $item['footnotes'] = $modifiedContent['footnotes'];
+        $finalData = $oldNewsExcel->map(function ($item) use ($indexedSectors) {
 
-            // Step 3: Timestamp conversion
+            //Create Custom Publish Status column to map with acf field
+            $status = 'Status';
+            $new_publish_column = 'custom_publish_status';
+
+            if (isset($item[$status])) {
+                if (strtolower($item[$status]) === 'draft') {
+                    $item[$new_publish_column] = 'private'; // No need for quotes here
+                } else {
+                    $item[$new_publish_column] = $item[$status]; // Directly assign the status
+                }
+            } else {
+                $item[$new_publish_column] = ''; // Empty value if status is missing
+            }
+
+            // Business sector mapping
+            if (! empty($item['news_business_sector'])) {
+                $item = $this->mapBusinessSector($item, $indexedSectors);
+            }
+
+            // Footnote extraction
+            if (! empty($item['Content'])) {
+                $modifiedContent = $this->extractFootnotes($item['Content']);
+                $item['Content'] = $modifiedContent['cleaned_content'];
+                $item['footnotes'] = $modifiedContent['footnotes'];
+            }
+
+            // Timestamp conversion
             if (! empty($item['wpcf-news-publish_date'])) {
                 $item['wpcf-news-publish_date'] = $this->convertTimestampFormat($item['wpcf-news-publish_date']);
             }
 
-            // Step 4: Clean HTML from news_summary and convert it to plain text
+            // Clean HTML from news_summary and convert it to plain text
             if (! empty($item['news_summary'])) {
                 // Use strip_tags to remove any HTML tags from the summary
                 $item['news_summary'] = strip_tags($item['news_summary']);
             }
 
+            // Handle Push notification column
+            if (! empty($item['Push notification'])) {
+                $item['Push notification'] = strtolower($item['Push notification']) === 'yes' ? '1' : '';
+            }
+
+            // Handle Publish on mobile column
+            if (! empty($item['Publish on mobile ?'])) {
+                $item['Publish on mobile ?'] = strtolower($item['Publish on mobile ?']) === 'yes' ? '1' : '';
+            }
+
             return $item;
         });
+
+        // dd($finalData);
 
         // Convert data to array with headers
         $rows = $this->prepareForExcel($finalData);
 
-        // Define the file path
-        $filePath = 'public/build.csv';
+        // Define a temporary file path
+        $tempFilePath = 'public/temp_build.csv';
+        $finalFilePath = 'public/build.csv';
 
-        // Delete the file if it already exists
-        if (Storage::exists($filePath)) {
-            Storage::delete($filePath);
-        }
-
-        // Store the final Excel file
+        // Store the CSV using Maatwebsite Excel to a temporary file
         Excel::store(new class ($rows) implements \Maatwebsite\Excel\Concerns\FromArray {
             protected $finalData;
             public function __construct(array $finalData)
@@ -83,9 +111,24 @@ class NewExcel extends Command
             {
                 return $this->finalData;
             }
-        }, $filePath);
+        }, $tempFilePath);
 
-        print_r('New file has been generated');
+        // Add BOM for UTF-8 compatibility with Excel
+        $csvContent = Storage::get($tempFilePath);
+        $csvContentWithBom = "\xEF\xBB\xBF" . $csvContent;
+
+        // Delete the old file if it exists
+        if (Storage::exists($finalFilePath)) {
+            Storage::delete($finalFilePath);
+        }
+
+        // Store the new CSV with BOM in the final location
+        Storage::put($finalFilePath, $csvContentWithBom);
+
+        // Optionally delete the temporary file
+        Storage::delete($tempFilePath);
+
+        print_r('New file has been generated with BOM - ' . $finalFilePath);
     }
 
     /**
