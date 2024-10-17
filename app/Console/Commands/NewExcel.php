@@ -15,7 +15,7 @@ class NewExcel extends Command
      *
      * @var string
      */
-    protected $signature = 'app:new-excel';
+    protected $signature = 'app:news';
 
     /**
      * The console command description.
@@ -31,10 +31,10 @@ class NewExcel extends Command
     public function handle()
     {
         // Load and format business sector data
-        $oldBusinessSectorExcel = $this->formatExcelData('app/public/business-sector.csv');
+        $oldBusinessSectorExcel = $this->formatExcelData('app/public/business-sector/business-sector.csv');
 
         // Load and format news data
-        $oldNewsExcel = $this->formatExcelData('app/public/Press-Release-2.0.csv');
+        $oldNewsExcel = $this->formatExcelData('app/public/press-release/Press-Release-2.0.csv');
 
         $indexedSectors = $this->preIndexSectors($oldBusinessSectorExcel);
 
@@ -46,12 +46,12 @@ class NewExcel extends Command
 
             if (isset($item[$status])) {
                 if (strtolower($item[$status]) === 'draft') {
-                    $item[$new_publish_column] = 'private'; // No need for quotes here
+                    $item[$new_publish_column] = 'private';
                 } else {
-                    $item[$new_publish_column] = $item[$status]; // Directly assign the status
+                    $item[$new_publish_column] = $item[$status];
                 }
             } else {
-                $item[$new_publish_column] = ''; // Empty value if status is missing
+                $item[$new_publish_column] = '';
             }
 
             // Business sector mapping
@@ -64,6 +64,9 @@ class NewExcel extends Command
                 $modifiedContent = $this->extractFootnotes($item['Content']);
                 $item['Content'] = $modifiedContent['cleaned_content'];
                 $item['footnotes'] = $modifiedContent['footnotes'];
+
+                // Replace old domain URL with new domain URL in 'Content'
+                $item['Content'] = str_replace('https://alj.com/', 'https://media.alj.com/', $item['Content']);
             }
 
             // Timestamp conversion
@@ -97,7 +100,7 @@ class NewExcel extends Command
 
         // Define a temporary file path
         $tempFilePath = 'public/temp_build.csv';
-        $finalFilePath = 'public/build.csv';
+        $finalFilePath = 'public/build-news.csv';
 
         // Store the CSV using Maatwebsite Excel to a temporary file
         Excel::store(new class ($rows) implements \Maatwebsite\Excel\Concerns\FromArray {
