@@ -34,13 +34,17 @@ class NewExcel extends Command
         $oldBusinessSectorExcel = $this->formatExcelData('app/public/business-sector/business-sector.csv');
 
         // Load and format news data
-        $oldNewsExcel = $this->formatExcelData('app/public/press-release/Press-Release-2.0.csv');
+        $oldNewsExcel = $this->formatExcelData('app/public/quick-reads/quick-reads.csv');
 
         $indexedSectors = $this->preIndexSectors($oldBusinessSectorExcel);
 
         $finalData = $oldNewsExcel->map(function ($item) use ($indexedSectors) {
 
-            //Create Custom Publish Status column to map with acf field
+            /**
+             * ==============================================================
+             * Task 1: Create Custom Publish Status column to map with acf field
+             * ==============================================================
+             */
             $status = 'Status';
             $new_publish_column = 'custom_publish_status';
 
@@ -54,38 +58,65 @@ class NewExcel extends Command
                 $item[$new_publish_column] = '';
             }
 
-            // Business sector mapping
-            if (! empty($item['news_business_sector'])) {
-                $item = $this->mapBusinessSector($item, $indexedSectors);
-            }
+            /**
+             * ==============================================================
+             * Task 2: Business sector mapping
+             * ==============================================================
+             */
+            // if (! empty($item['news_business_sector'])) {
+            $item = $this->mapBusinessSector($item, $indexedSectors);
+            // }
 
-            // Footnote extraction
-            if (! empty($item['Content'])) {
-                $modifiedContent = $this->extractFootnotes($item['Content']);
-                $item['Content'] = $modifiedContent['cleaned_content'];
-                $item['footnotes'] = $modifiedContent['footnotes'];
 
-                // Replace old domain URL with new domain URL in 'Content'
-                $item['Content'] = str_replace('https://alj.com/', 'https://media.alj.com/', $item['Content']);
-            }
+            /**
+             * ==============================================================
+             * Task 3: Footnote extraction
+             * ==============================================================
+             */
+            // if (! empty($item['Content'])) {
+            $modifiedContent = $this->extractFootnotes($item['Content']);
+            $item['Content'] = $modifiedContent['cleaned_content'];
+            $item['footnotes'] = $modifiedContent['footnotes'];
 
-            // Timestamp conversion
+            // Replace old domain URL with new domain URL in 'Content'
+            $item['Content'] = str_replace('https://alj.com/', 'https://media.alj.com/', $item['Content']);
+            // }
+
+
+            /**
+             * ==============================================================
+             * Task 4: Timestamp conversion
+             * ==============================================================
+             */
             if (! empty($item['wpcf-news-publish_date'])) {
                 $item['wpcf-news-publish_date'] = $this->convertTimestampFormat($item['wpcf-news-publish_date']);
             }
 
-            // Clean HTML from news_summary and convert it to plain text
+
+            /**
+             * ==============================================================
+             * Task 5: Clean HTML from news_summary and convert it to plain text
+             * ==============================================================
+             */
             if (! empty($item['news_summary'])) {
                 // Use strip_tags to remove any HTML tags from the summary
                 $item['news_summary'] = strip_tags($item['news_summary']);
             }
 
-            // Handle Push notification column
+            /**
+             * ==============================================================
+             * Task 6: Handle Push notification column
+             * ==============================================================
+             */
             if (! empty($item['Push notification'])) {
                 $item['Push notification'] = strtolower($item['Push notification']) === 'yes' ? '1' : '';
             }
 
-            // Handle Publish on mobile column
+            /**
+             * ==============================================================
+             * Task 7: Handle Publish on mobile column
+             * ==============================================================
+             */
             if (! empty($item['Publish on mobile ?'])) {
                 $item['Publish on mobile ?'] = strtolower($item['Publish on mobile ?']) === 'yes' ? '1' : '';
             }
@@ -100,7 +131,7 @@ class NewExcel extends Command
 
         // Define a temporary file path
         $tempFilePath = 'public/temp_build.csv';
-        $finalFilePath = 'public/build-news.csv';
+        $finalFilePath = 'public/build-quick-reads.csv';
 
         // Store the CSV using Maatwebsite Excel to a temporary file
         Excel::store(new class ($rows) implements \Maatwebsite\Excel\Concerns\FromArray {
@@ -258,7 +289,9 @@ class NewExcel extends Command
                 $output[] = $dom->saveHTML($parent);
 
                 // Remove the parent from the DOM
-                $parent->parentNode->removeChild($parent);
+                if ($parent->parentNode) {
+                    $parent->parentNode->removeChild($parent);
+                }
             } else {
                 // If not a <p> tag, find the closest parent that is a <p>
                 $pParent = $parent;
@@ -269,8 +302,10 @@ class NewExcel extends Command
                 if ($pParent) {
                     $output[] = $dom->saveHTML($pParent);
 
-                    // Remove the parent from the DOM
-                    $pParent->parentNode->removeChild($pParent);
+                    // Remove the parent from the DOM if it exists
+                    if ($pParent->parentNode) {
+                        $pParent->parentNode->removeChild($pParent);
+                    }
                 }
             }
         }
