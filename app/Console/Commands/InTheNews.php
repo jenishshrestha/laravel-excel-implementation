@@ -73,7 +73,7 @@ class InTheNews extends Command
              * ==============================================================
              */
 
-            $item['footnotes'] = null;
+            $item['footnotes'] = '';
             if (! empty($item['Content'])) {
                 $modifiedContent = $this->extractFootnotes($item['Content']);
                 $item['Content'] = $modifiedContent['cleaned_content'];

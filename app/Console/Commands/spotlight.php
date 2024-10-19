@@ -33,7 +33,7 @@ class spotlight extends Command
         $oldBusinessSectorExcel = $this->formatExcelData('app/public/business-sector/business-sector.csv');
 
         // Load and format news data
-        $oldNewsExcel = $this->formatExcelData('app/public/spotlight/spotlight.csv');
+        $oldNewsExcel = $this->formatExcelData('app/public/spotlight/Spotlight.csv');
 
         $indexedSectors = $this->preIndexSectors($oldBusinessSectorExcel);
 
@@ -72,14 +72,16 @@ class spotlight extends Command
              * Task 3: Footnote extraction
              * ==============================================================
              */
-            // if (! empty($item['Content'])) {
-            $modifiedContent = $this->extractFootnotes($item['Content']);
-            $item['Content'] = $modifiedContent['cleaned_content'];
-            $item['footnotes'] = $modifiedContent['footnotes'];
+            $item['footnotes'] = '';
 
-            // Replace old domain URL with new domain URL in 'Content'
-            $item['Content'] = str_replace('https://alj.com/', 'https://media.alj.com/', $item['Content']);
-            // }
+            if (! empty($item['Content'])) {
+                $modifiedContent = $this->extractFootnotes($item['Content']);
+                $item['Content'] = $modifiedContent['cleaned_content'];
+                $item['footnotes'] = $modifiedContent['footnotes'];
+
+                // Replace old domain URL with new domain URL in 'Content'
+                $item['Content'] = str_replace('https://alj.com/app/uploads/', 'https://media.alj.com/app/uploads/', $item['Content']);
+            }
 
 
             /**
@@ -122,8 +124,6 @@ class spotlight extends Command
 
             return $item;
         });
-
-        // dd($finalData);
 
         // Convert data to array with headers
         $rows = $this->prepareForExcel($finalData);
@@ -279,31 +279,48 @@ class spotlight extends Command
         $footnotes = $xpath->query('//a[contains(@href, "#_ftnref")]');
 
         $output = [];
+
         foreach ($footnotes as $footnote) {
-            // Get the parent node of the footnote link
             $parent = $footnote->parentNode;
 
-            // Check if the parent is a <p> tag
-            if ($parent->nodeName === 'p') {
+            // Case 1: If the footnote is inside a <p> tag, capture the whole <p> content
+            if ($parent && $parent->nodeName === 'p') {
                 $output[] = $dom->saveHTML($parent);
-
-                // Remove the parent from the DOM
                 if ($parent->parentNode) {
                     $parent->parentNode->removeChild($parent);
                 }
-            } else {
-                // If not a <p> tag, find the closest parent that is a <p>
-                $pParent = $parent;
-                while ($pParent && $pParent->nodeName !== 'p') {
-                    $pParent = $pParent->parentNode;
-                }
-                // If found, add the HTML of the <p> tag to output
-                if ($pParent) {
-                    $output[] = $dom->saveHTML($pParent);
+            } else if ($parent && $parent->nodeName === 'body') {
+                // Case 2: If the footnote is not wrapped inside <p> or another block-level element
 
-                    // Remove the parent from the DOM if it exists
-                    if ($pParent->parentNode) {
-                        $pParent->parentNode->removeChild($pParent);
+                // Capture the footnote and its immediate sibling <a> link or text
+                $siblingData = $this->getNextSiblingContent($footnote);
+
+                $output[] = $dom->saveHTML($footnote) . ' ' . $siblingData['content'];
+
+                // Remove the footnote and its associated text from the DOM
+                if ($footnote->parentNode) {
+                    $footnote->parentNode->removeChild($footnote);
+                }
+
+                // Remove the extracted sibling nodes from the DOM
+                foreach ($siblingData['nodes'] as $nodeToRemove) {
+                    if ($nodeToRemove instanceof \DOMNode && $nodeToRemove->parentNode) {
+                        $nodeToRemove->parentNode->removeChild($nodeToRemove);  // Remove sibling node
+                    }
+                }
+            } else {
+                // Case 3: Other cases where the footnote is wrapped in something else (e.g., <span>)
+
+                $blockTags = ['p', 'div'];
+                while ($parent && ! in_array($parent->nodeName, $blockTags)) {
+                    $parent = $parent->parentNode;
+                }
+
+                // If found a block-level parent, process it
+                if ($parent) {
+                    $output[] = $dom->saveHTML($parent);
+                    if ($parent->parentNode) {
+                        $parent->parentNode->removeChild($parent);
                     }
                 }
             }
@@ -319,10 +336,59 @@ class spotlight extends Command
         // Remove the <body> tags to leave only the inner content
         $bodyContent = preg_replace('/^<body[^>]*>|<\/body>$/', '', $bodyContent);
 
+        $cleanedHtml = $this->cleanHtmlEnd($bodyContent);
+
         // Return footnotes as HTML with line breaks
         return [
-            'cleaned_content' => trim($bodyContent),
+            'cleaned_content' => trim($cleanedHtml),
             'footnotes' => implode('', $output),
         ];
     }
+
+    private function getNextSiblingContent($node)
+    {
+        $next = $node->nextSibling;
+        $content = '';
+        $nodesToRemove = [];  // To store nodes to be removed
+
+        // Loop over next siblings until we find a valid node (like <a> or text) or reach the end
+        while ($next && ($next->nodeType === XML_TEXT_NODE || $next->nodeName === 'a')) {
+            // Stop as soon as text (including spaces) is found
+            if ($next->nodeType === XML_TEXT_NODE && trim($next->textContent) !== '') {
+                $content .= $next->textContent;
+                $nodesToRemove[] = $next;
+                break;
+            } else if ($next->nodeType === XML_TEXT_NODE && trim($next->textContent) === '') {
+                // If it's whitespace, append it but don't stop
+                $content .= $next->textContent;
+                $nodesToRemove[] = $next;
+
+            } else if ($next->nodeName === 'a') {
+                $content .= $next->ownerDocument->saveHTML($next);
+                $nodesToRemove[] = $next;
+                break;
+            }
+
+            $next = $next->nextSibling;
+        }
+
+        return [
+            'content' => trim($content),
+            'nodes' => $nodesToRemove
+        ];
+    }
+
+    /**
+     * Summary of cleanHtmlEnd
+     * @param mixed $htmlContent
+     * @return array|string|null
+     */
+    private function cleanHtmlEnd($htmlContent)
+    {
+        // Correct pattern with \x{A0} for non-breaking spaces and match trailing newlines, spaces, or stray characters
+        $htmlContent = preg_replace('/(\s*[\x{A0}\n?]+)$/u', '', $htmlContent);  // Only clean the end of the content
+
+        return $htmlContent;
+    }
+
 }
