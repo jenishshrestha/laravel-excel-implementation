@@ -75,12 +75,19 @@ class perspective extends Command
             $item['footnotes'] = '';
 
             if (! empty($item['Content'])) {
+
+                // Replace old domain URL with new domain URL in 'Content' for img tags only
+                $item['Content'] = $this->replaceImageSrcDomain($item['Content'], 'https://alj.com/', 'https://media.alj.com/');
+                $item['Content'] = $this->replaceImageSrcDomain($item['Content'], 'https://www.alj.com/', 'https://media.alj.com/');
+
+                // process data
                 $modifiedContent = $this->extractFootnotes($item['Content']);
                 $item['Content'] = $modifiedContent['cleaned_content'];
                 $item['footnotes'] = $modifiedContent['footnotes'];
 
-                // Replace old domain URL with new domain URL in 'Content'
-                $item['Content'] = str_replace('https://alj.com/app/uploads/', 'https://media.alj.com/app/uploads/', $item['Content']);
+                // $item['Content'] = '<img class=""wp-image-53743 size-full"" src=""https://media.alj.com/app/uploads/2019/11/Global-surface-temperature-relative-to-1951-1980-average-temperatures.png"" alt=""This graph illustrates the change in global surface temperature relative to 1951-1980 average temperatures.  Eighteen of the 19 warmest years all have occurred since 2001, with the exception of 1998.  The year 2016 ranks as the warmest on record."" width=""590"" height=""300""><img class=""size-full wp-image-95668"" src=""https://alj.com/app/uploads/2022/02/James-Mnyupe.jpg"" alt="""" width=""228"" height=""228"">';
+
+                // dd($item['Content']);
             }
 
 
@@ -129,39 +136,10 @@ class perspective extends Command
         $rows = $this->prepareForExcel($finalData);
 
         // Define a temporary file path
-        $tempFilePath = 'public/temp_build.csv';
         $finalFilePath = 'public/build-perspectives.csv';
 
-        // Store the CSV using Maatwebsite Excel to a temporary file
-        Excel::store(new class ($rows) implements \Maatwebsite\Excel\Concerns\FromArray {
-            protected $finalData;
-            public function __construct(array $finalData)
-            {
-                $this->finalData = $finalData;
-            }
-
-            public function array() : array
-            {
-                return $this->finalData;
-            }
-        }, $tempFilePath);
-
-        // Add BOM for UTF-8 compatibility with Excel
-        $csvContent = Storage::get($tempFilePath);
-        $csvContentWithBom = "\xEF\xBB\xBF" . $csvContent;
-
-        // Delete the old file if it exists
-        if (Storage::exists($finalFilePath)) {
-            Storage::delete($finalFilePath);
-        }
-
-        // Store the new CSV with BOM in the final location
-        Storage::put($finalFilePath, $csvContentWithBom);
-
-        // Optionally delete the temporary file
-        Storage::delete($tempFilePath);
-
-        print_r('New file has been generated with BOM - ' . $finalFilePath);
+        // Split the CSV into chunks with a chunk size of 1000 rows (excluding headers)
+        $this->splitCsvIntoChunks($rows, 250, $finalFilePath);
     }
 
     /**
@@ -310,7 +288,7 @@ class perspective extends Command
                 // Capture the footnote and its immediate sibling <a> link or text
                 $siblingData = $this->getNextSiblingContent($footnote);
 
-                $output[] = $dom->saveHTML($footnote) . ' ' . $siblingData['content'];
+                $output[] = '<p>' . $dom->saveHTML($footnote) . ' ' . $siblingData['content'] . '</p>';
 
                 // Remove the footnote and its associated text from the DOM
                 if ($footnote->parentNode) {
@@ -407,4 +385,80 @@ class perspective extends Command
 
         return $htmlContent;
     }
+
+    /**
+     * Replace old domain in img tags with a new domain.
+     *
+     * @param string $content The content containing HTML with img tags.
+     * @param string $oldDomain The old domain URL to search for.
+     * @param string $newDomain The new domain URL to replace with.
+     * @return string Processed content with updated img tag URLs.
+     */
+    private function replaceImageSrcDomain($content, $oldDomain, $newDomain)
+    {
+        // Define the regular expression to find <img> tags with src attributes
+        return preg_replace_callback(
+            '/<img\s+[^>]*src=(["\']{1,2})(' . preg_quote($oldDomain, '/') . '[^"\']+)\1/i',
+            function ($matches) use ($oldDomain, $newDomain) {
+                // Replace the old domain with the new one in the src attribute
+                return str_replace($matches[2], str_replace($oldDomain, $newDomain, $matches[2]), $matches[0]);
+            },
+            $content
+        );
+    }
+
+    /**
+     * Split a large CSV file into smaller files.
+     * 
+     * @param array $rows The array of rows to be split.
+     * @param int $chunkSize The number of rows per chunk (excluding headers).
+     * @param string $finalFilePath The base file path to save chunks.
+     * @return void
+     */
+    private function splitCsvIntoChunks(array $rows, int $chunkSize, string $finalFilePath)
+    {
+        // Extract headers from the rows
+        $headers = array_shift($rows);  // Remove and save the first row as headers
+
+        // Split rows into chunks
+        $chunks = array_chunk($rows, $chunkSize);
+
+        // Count how many chunks were generated
+        $totalChunks = count($chunks);
+
+        foreach ($chunks as $index => $chunk) {
+            $chunkFilePath = str_replace('.csv', "-part" . ($index + 1) . ".csv", $finalFilePath);
+
+            // Prepend the headers to each chunk
+            array_unshift($chunk, $headers);
+
+            // Use Maatwebsite Excel to store the chunk
+            Excel::store(new class ($chunk) implements \Maatwebsite\Excel\Concerns\FromArray {
+                protected $finalData;
+                public function __construct(array $finalData)
+                {
+                    $this->finalData = $finalData;
+                }
+
+                public function array() : array
+                {
+                    return $this->finalData;
+                }
+            }, $chunkFilePath);
+
+            // Add BOM to ensure UTF-8 encoding is correctly interpreted
+            $csvContent = Storage::get($chunkFilePath);
+            $csvContentWithBom = "\xEF\xBB\xBF" . $csvContent;
+
+            // Overwrite the file with BOM content
+            Storage::put($chunkFilePath, $csvContentWithBom);
+
+            // Print file name for each generated chunk (optional)
+            $this->info('Generated file: ' . $chunkFilePath);
+        }
+
+        // Output the total number of generated files
+        $this->info('Total files generated: ' . $totalChunks);
+    }
+
 }

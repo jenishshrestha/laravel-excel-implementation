@@ -75,12 +75,19 @@ class spotlight extends Command
             $item['footnotes'] = '';
 
             if (! empty($item['Content'])) {
+
+                // Replace old domain URL with new domain URL in 'Content' for img tags only
+                $item['Content'] = $this->replaceImageSrcDomain($item['Content'], 'https://alj.com/', 'https://media.alj.com/');
+                $item['Content'] = $this->replaceImageSrcDomain($item['Content'], 'https://www.alj.com/', 'https://media.alj.com/');
+
+                // process data
                 $modifiedContent = $this->extractFootnotes($item['Content']);
                 $item['Content'] = $modifiedContent['cleaned_content'];
                 $item['footnotes'] = $modifiedContent['footnotes'];
 
-                // Replace old domain URL with new domain URL in 'Content'
-                $item['Content'] = str_replace('https://alj.com/app/uploads/', 'https://media.alj.com/app/uploads/', $item['Content']);
+                // $item['Content'] = '<img class=""wp-image-53743 size-full"" src=""https://www.alj.com/app/uploads/2019/11/Global-surface-temperature-relative-to-1951-1980-average-temperatures.png"" alt=""This graph illustrates the change in global surface temperature relative to 1951-1980 average temperatures.  Eighteen of the 19 warmest years all have occurred since 2001, with the exception of 1998.  The year 2016 ranks as the warmest on record."" width=""590"" height=""300""><img class=""size-full wp-image-95668"" src=""https://alj.com/app/uploads/2022/02/James-Mnyupe.jpg"" alt="""" width=""228"" height=""228"">';
+
+                // dd($item['Content']);
             }
 
 
@@ -281,6 +288,16 @@ class spotlight extends Command
         $output = [];
 
         foreach ($footnotes as $footnote) {
+
+            // Case 4: Fallback for when all of the footnotes share common parent
+            // In this case parents gets already removed after first footnote is extracted so this fallback is necessary
+            $footnotes = $xpath->query('//a[contains(@href, "#_ftnref")]');
+
+            if ($footnotes->length === 0) {
+                break;
+            }
+
+
             $parent = $footnote->parentNode;
 
             // Case 1: If the footnote is inside a <p> tag, capture the whole <p> content
@@ -295,7 +312,7 @@ class spotlight extends Command
                 // Capture the footnote and its immediate sibling <a> link or text
                 $siblingData = $this->getNextSiblingContent($footnote);
 
-                $output[] = $dom->saveHTML($footnote) . ' ' . $siblingData['content'];
+                $output[] = '<p>' . $dom->saveHTML($footnote) . ' ' . $siblingData['content'] . '</p>';
 
                 // Remove the footnote and its associated text from the DOM
                 if ($footnote->parentNode) {
@@ -355,7 +372,8 @@ class spotlight extends Command
         while ($next && ($next->nodeType === XML_TEXT_NODE || $next->nodeName === 'a')) {
             // Stop as soon as text (including spaces) is found
             if ($next->nodeType === XML_TEXT_NODE && trim($next->textContent) !== '') {
-                $content .= $next->textContent;
+                // $content .= $next->textContent;
+                $content .= htmlspecialchars($next->textContent, ENT_QUOTES, 'UTF-8') . ' ';
                 $nodesToRemove[] = $next;
                 break;
             } else if ($next->nodeType === XML_TEXT_NODE && trim($next->textContent) === '') {
@@ -373,7 +391,7 @@ class spotlight extends Command
         }
 
         return [
-            'content' => trim($content),
+            'content' => $content,
             'nodes' => $nodesToRemove
         ];
     }
@@ -391,4 +409,25 @@ class spotlight extends Command
         return $htmlContent;
     }
 
+
+    /**
+     * Replace old domain in img tags (both src and srcset) with a new domain.
+     *
+     * @param string $content The content containing HTML with img tags.
+     * @param string $oldDomain The old domain URL to search for (e.g., 'https://alj.com/').
+     * @param string $newDomain The new domain URL to replace with.
+     * @return string Processed content with updated img tag URLs.
+     */
+    private function replaceImageSrcDomain($content, $oldDomain, $newDomain)
+    {
+        // Define the regular expression to find <img> tags with src attributes
+        return preg_replace_callback(
+            '/<img\s+[^>]*src=(["\']{1,2})(' . preg_quote($oldDomain, '/') . '[^"\']+)\1/i',
+            function ($matches) use ($oldDomain, $newDomain) {
+                // Replace the old domain with the new one in the src attribute
+                return str_replace($matches[2], str_replace($oldDomain, $newDomain, $matches[2]), $matches[0]);
+            },
+            $content
+        );
+    }
 }
